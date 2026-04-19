@@ -40,7 +40,8 @@
         {
           "microphonePermission": "Allow $(PRODUCT_NAME) to record audio with the microphone."
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }
