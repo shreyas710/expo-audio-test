@@ -14,7 +14,6 @@ export default function RecordAndPlay() {
     startRecording,
     stopRecording,
     prepareToRecord,
-    postStopRecording,
   } = useAudioContext();
 
   const startPlayer = useAudioPlayer(record_start);
@@ -25,7 +24,6 @@ export default function RecordAndPlay() {
   const handleRecordButtonPress = async () => {
     if (isRecording) {
       const uri = await stopRecording();
-      await postStopRecording();
 
       await endPlayer.seekTo(0);
       endPlayer.play();
@@ -42,20 +40,18 @@ export default function RecordAndPlay() {
 
       setRecordFileUrl(uri);
     } else {
-      await startPlayer.seekTo(0);
-
-      startPlayer.play();
-
       const unsub = startPlayer.addListener(
         "playbackStatusUpdate",
         async (status) => {
           if (status.didJustFinish) {
-            await prepareToRecord();
-            await startRecording();
             unsub.remove();
+            await startRecording();
           }
         },
       );
+
+      await startPlayer.seekTo(0);
+      startPlayer.play();
     }
   };
 
@@ -76,10 +72,11 @@ export default function RecordAndPlay() {
 
     const prepareToRecordAndPlay = async () => {
       await startPlayer.seekTo(0);
+      await prepareToRecord();
     };
     prepareToRecordAndPlay();
     requestPermission();
-  }, [startPlayer]);
+  }, []);
 
   return (
     <View

@@ -30,7 +30,6 @@ export type AudioContextType = {
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<string>;
   prepareToRecord: () => Promise<void>;
-  postStopRecording: () => Promise<void>;
 };
 
 const defaultAudioContextValue: AudioContextType = {
@@ -41,7 +40,6 @@ const defaultAudioContextValue: AudioContextType = {
   startRecording: async () => {},
   stopRecording: async () => "",
   prepareToRecord: async () => {},
-  postStopRecording: async () => {},
 };
 
 const AudioContext = createContext<AudioContextType>(defaultAudioContextValue);
@@ -93,7 +91,6 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const recorderState = useAudioRecorderState(recorder);
 
   const [permissionGranted, setPermissionGranted] = useState(false);
-  const [isRecorderPrepared, setIsRecorderPrepared] = useState(false);
 
   const playbackCallbackRef = useRef<
     ((status: AudioStatus) => void) | undefined
@@ -158,32 +155,18 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       playsInSilentMode: true,
     });
 
-    if (!isRecorderPrepared) {
-      await recorder.prepareToRecordAsync();
-      setIsRecorderPrepared(true);
-    }
-  }, [permissionGranted, isRecorderPrepared, recorder]);
+    await recorder.prepareToRecordAsync();
+  }, [permissionGranted, recorder]);
 
   const startRecording = useCallback(async () => {
-    if (!isRecorderPrepared) {
-      await prepareToRecord();
-    }
     recorder.record();
-  }, [isRecorderPrepared, prepareToRecord, recorder]);
+  }, [recorder]);
 
   const stopRecording = useCallback(async () => {
     await recorder.stop();
     const uri = recorder.uri ?? "";
     return uri;
   }, [recorder]);
-
-  const postStopRecording = useCallback(async () => {
-    await setAudioModeAsync({
-      allowsRecording: false,
-      playsInSilentMode: true,
-    });
-    setIsRecorderPrepared(false);
-  }, []);
 
   const value: AudioContextType = {
     isPlaying: playerStatus.playing,
@@ -193,7 +176,6 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     startRecording,
     stopRecording,
     prepareToRecord,
-    postStopRecording,
   };
 
   return (
