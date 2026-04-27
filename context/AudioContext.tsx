@@ -153,36 +153,57 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       setPermissionGranted(true);
     }
 
-    await setAudioModeAsync({
-      allowsRecording: true,
-      playsInSilentMode: true,
-    });
-
     if (!isRecorderPrepared) {
-      await recorder.prepareToRecordAsync();
+      console.log("[timing] prepareToRecordAsync start:", Date.now());
+      await recorder.prepareToRecordAsync(RecordingPresets.HIGH_QUALITY);
+      console.log("[timing] prepareToRecordAsync done:", Date.now());
       setIsRecorderPrepared(true);
+    } else {
+      console.log("[timing] prepareToRecord: already prepared, skipping prepareToRecordAsync");
     }
+
+    // Return to playback category so audio routes through the speaker.
+    // startRecording() switches back to allowsRecording:true before record().
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
   }, [permissionGranted, isRecorderPrepared, recorder]);
 
   const startRecording = useCallback(async () => {
+    // Always reactivate the audio session here. The chime player has no
+    // keepAudioSessionActive, so AVAudioSession is deactivated when the chime
+    // finishes. Without this call the recorder starts on a dead session and
+    // produces a near-empty file, even when the recorder was pre-warmed.
+    console.log("[timing] startRecording: setAudioModeAsync (reactivate session):", Date.now());
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    console.log("[timing] startRecording: session active:", Date.now());
+
     if (!isRecorderPrepared) {
-      await prepareToRecord();
+      console.log("[timing] startRecording: not pre-warmed, calling prepareToRecordAsync:", Date.now());
+      await recorder.prepareToRecordAsync(RecordingPresets.HIGH_QUALITY);
+      console.log("[timing] startRecording: prepareToRecordAsync done:", Date.now());
+      setIsRecorderPrepared(true);
+    } else {
+      // Fast reset: reuses same AVAudioRecorder and file path, just moves native
+      // state from .stopped back to .prepared. No new recorder allocation, no new UUID.
+      console.log("[timing] startRecording: fast reset prepareToRecordAsync (no options):", Date.now());
+      await recorder.prepareToRecordAsync();
+      console.log("[timing] startRecording: fast reset done:", Date.now());
     }
+
+    console.log("[timing] recorder.record() called:", Date.now());
     recorder.record();
-  }, [isRecorderPrepared, prepareToRecord, recorder]);
+  }, [isRecorderPrepared, recorder]);
 
   const stopRecording = useCallback(async () => {
     await recorder.stop();
     const uri = recorder.uri ?? "";
+    console.log("[AudioContext] recorded file uri:", uri);
     return uri;
   }, [recorder]);
 
   const postStopRecording = useCallback(async () => {
-    await setAudioModeAsync({
-      allowsRecording: false,
-      playsInSilentMode: true,
-    });
-    setIsRecorderPrepared(false);
+    // Return to playback category so the end chime and recorded-audio playback
+    // route through the speaker instead of the earpiece.
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
   }, []);
 
   const value: AudioContextType = {

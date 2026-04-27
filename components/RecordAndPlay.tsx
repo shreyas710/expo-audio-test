@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { AudioModule, useAudioPlayer } from "expo-audio";
 import { record_end, record_start } from "../assets/audio";
 import { useAudioContext } from "../context/AudioContext";
@@ -17,23 +17,26 @@ export default function RecordAndPlay() {
     postStopRecording,
   } = useAudioContext();
 
-  const startPlayer = useAudioPlayer(record_start);
+  // keepAudioSessionActive: true prevents the chime player from calling
+  // session.setActive(false) (with a 100ms delay) when playback finishes.
+  // Without this, the deactivation fires ~100ms after the chime ends while
+  // recorder.record() is already running, sending an AVAudioSession interruption
+  // that stops the recording after ~98ms. Subsequent recordings weren't affected
+  // because prepareToRecordAsync() calls session.setActive(true) in its critical
+  // path, which prevents the deactivation from succeeding.
+  const startPlayer = useAudioPlayer(record_start, { keepAudioSessionActive: true });
   const endPlayer = useAudioPlayer(record_end);
 
   const isDisabled = isPlaying;
 
   const handleRecordButtonPress = async () => {
     if (isRecording) {
+      console.log("[timing] stop button pressed:", Date.now());
       const uri = await stopRecording();
       await postStopRecording();
 
       await endPlayer.seekTo(0);
       endPlayer.play();
-      const unsub = endPlayer.addListener("playbackStatusUpdate", (status) => {
-        if (status.didJustFinish) {
-          unsub.remove();
-        }
-      });
 
       if (uri == "") {
         console.log("Failed to record. Please try again.");
@@ -42,22 +45,34 @@ export default function RecordAndPlay() {
 
       setRecordFileUrl(uri);
     } else {
+      console.log("[timing] record button pressed:", Date.now());
       await startPlayer.seekTo(0);
-
+      console.log("[timing] start chime playing:", Date.now());
       startPlayer.play();
 
       const unsub = startPlayer.addListener(
         "playbackStatusUpdate",
         async (status) => {
           if (status.didJustFinish) {
-            await prepareToRecord();
+            console.log("[timing] chime finished, calling startRecording:", Date.now());
             await startRecording();
+            console.log("[timing] startRecording returned (recording active):", Date.now());
             unsub.remove();
           }
         },
       );
     }
   };
+
+  // Pre-warm the recorder on mount so prepareToRecordAsync is NOT in the
+  // critical path between chime finishing and recording starting.
+  useEffect(() => {
+    console.log("[timing] mount: pre-warming recorder:", Date.now());
+    prepareToRecord()
+      .then(() => console.log("[timing] mount: pre-warm done:", Date.now()))
+      .catch((e) => console.error("[timing] mount: pre-warm failed:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const requestPermission = async () => {
