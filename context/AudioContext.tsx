@@ -153,17 +153,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       setPermissionGranted(true);
     }
 
-    console.log("[timing] setAudioModeAsync start:", Date.now());
-    await setAudioModeAsync({
-      allowsRecording: true,
-      playsInSilentMode: true,
-    });
-    console.log("[timing] setAudioModeAsync done:", Date.now());
-
     if (!isRecorderPrepared) {
-      // Always pass options so the native layer creates a fresh AVAudioRecorder
-      // with a new UUID file path. Without options the same AVAudioRecorder is
-      // reused and calling prepareToRecord() on it truncates the previous file.
       console.log("[timing] prepareToRecordAsync start:", Date.now());
       await recorder.prepareToRecordAsync(RecordingPresets.HIGH_QUALITY);
       console.log("[timing] prepareToRecordAsync done:", Date.now());
@@ -171,6 +161,10 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     } else {
       console.log("[timing] prepareToRecord: already prepared, skipping prepareToRecordAsync");
     }
+
+    // Return to playback category so audio routes through the speaker.
+    // startRecording() switches back to allowsRecording:true before record().
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
   }, [permissionGranted, isRecorderPrepared, recorder]);
 
   const startRecording = useCallback(async () => {
@@ -206,7 +200,11 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     return uri;
   }, [recorder]);
 
-  const postStopRecording = useCallback(async () => {}, []);
+  const postStopRecording = useCallback(async () => {
+    // Return to playback category so the end chime and recorded-audio playback
+    // route through the speaker instead of the earpiece.
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+  }, []);
 
   const value: AudioContextType = {
     isPlaying: playerStatus.playing,
