@@ -48,44 +48,6 @@ const AudioContext = createContext<AudioContextType>(defaultAudioContextValue);
 
 export const useAudioContext = () => useContext(AudioContext);
 
-/** Local paths without a scheme need a file:// prefix for native players. */
-function normalizePlaybackSource(source: AudioSource): AudioSource {
-  if (source == null) {
-    return source;
-  }
-  if (typeof source === "string") {
-    const s = source.trim();
-    if (!s) {
-      return source;
-    }
-    if (/^[a-zA-Z][a-zA-Z+\-.]*:\/\//.test(s)) {
-      return s;
-    }
-    if (s.startsWith("/")) {
-      return `file://${s}`;
-    }
-    return s;
-  }
-  if (
-    typeof source === "object" &&
-    "uri" in source &&
-    typeof source.uri === "string"
-  ) {
-    const s = source.uri.trim();
-    if (!s) {
-      return source;
-    }
-    if (/^[a-zA-Z][a-zA-Z+\-.]*:\/\//.test(s)) {
-      return source;
-    }
-    if (s.startsWith("/")) {
-      return { ...source, uri: `file://${s}` };
-    }
-    return source;
-  }
-  return source;
-}
-
 export function AudioProvider({ children }: { children: ReactNode }) {
   const player = useAudioPlayer(null, { keepAudioSessionActive: true });
   const playerStatus = useAudioPlayerStatus(player);
@@ -100,6 +62,11 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   >(undefined);
 
   useEffect(() => {
+    console.log("[AudioContext] playerStatus changed:", {
+      playing: playerStatus.playing,
+      duration: playerStatus.duration,
+      currentTime: playerStatus.currentTime,
+    });
     playbackCallbackRef.current?.(playerStatus);
   }, [playerStatus]);
 
@@ -121,8 +88,11 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const stopAllAudio = useCallback(() => {
+    console.log("[AudioContext] stopAllAudio called");
     playbackCallbackRef.current = undefined;
+    console.log("[AudioContext] pausing player");
     player.pause();
+    console.log("[AudioContext] seeking to 0");
     void player.seekTo(0);
   }, [player]);
 
@@ -131,12 +101,21 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       audioSource: AudioSource,
       onStatusUpdate?: (status: AudioStatus) => void,
     ) => {
+      console.log("[AudioContext] playAudio called, audioSource:", audioSource);
+      console.log("[timing] playAudio start:", Date.now());
+
       stopAllAudio();
+      console.log("[AudioContext] stopAllAudio completed");
+
       playbackCallbackRef.current = onStatusUpdate;
 
+      console.log("[AudioContext] replacing player source");
       player.replace(audioSource);
+      console.log("[AudioContext] seeking to 0");
       await player.seekTo(0);
+      console.log("[AudioContext] calling player.play()");
       player.play();
+      console.log("[timing] playAudio end (play() called):", Date.now());
     },
     [player, stopAllAudio],
   );
@@ -203,7 +182,9 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const postStopRecording = useCallback(async () => {
     // Return to playback category so the end chime and recorded-audio playback
     // route through the speaker instead of the earpiece.
+    console.log("[timing] postStopRecording: setting playback mode:", Date.now());
     await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+    console.log("[timing] postStopRecording: playback mode set:", Date.now());
   }, []);
 
   const value: AudioContextType = {

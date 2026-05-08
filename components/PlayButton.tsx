@@ -18,6 +18,8 @@ export default function PlayButton({ soundUri, disabled }: PlayButtonProps) {
       ]}
       disabled={disabled}
       onPress={() => {
+        console.log("[PlayButton] play button pressed, disabled:", disabled, "soundUri:", soundUri.uri);
+        console.log("[PlayButton] isPlaying state:", isPlaying);
         void playAudio(soundUri);
       }}>
       <Text style={styles.label}>{isPlaying ? "Playing…" : "Play"}</Text>
